@@ -49,7 +49,7 @@ h1{font-size:clamp(26px,6vw,38px); font-weight:900; margin:4px 0 6px; letter-spa
 .wrap{position:relative}
 .maze{display:grid; grid-template-columns:repeat(5,1fr); gap:8px}
 .startrow{grid-column:1/-1; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; height:46px}
-.start{grid-column:2; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--muted)}
+.start{min-width:0}
 .cell{
   position:relative; aspect-ratio:1/1; display:flex; align-items:center; justify-content:center;
   font-size:clamp(17px,4.6vw,24px); font-weight:800; background:var(--card);
@@ -145,7 +145,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--c3); outline-of
 <script>
 // Приклади: порядок дій враховано (спочатку · та :, потім + та −).
 // c = [рядок, стовпчик] клітинки з правильною відповіддю.
-var EX = [
+var EX = [], GRID = [];
+// Запасний (фіксований) набір на випадок, якщо генерація не вдасться:
+var EX0 = [
   {t:"5 · 6 : 3",   a:10, c:[0,1]},
   {t:"60 − 24 : 4", a:54, c:[1,1]},
   {t:"8 · 7 − 16",  a:40, c:[1,2]},
@@ -155,7 +157,7 @@ var EX = [
   {t:"36 + 3 · 9",  a:63, c:[4,3]},
   {t:"100 − 45 : 5",a:91, c:[5,3]}
 ];
-var GRID = [
+var GRID0 = [
   [12,10,18,45,36],
   [33,54,40,56,27],
   [64,52,31,28,81],
@@ -173,18 +175,116 @@ var COLORS = ["var(--c1)","var(--c2)","var(--c3)","var(--c4)"];
 var maze = document.getElementById("maze"), exEl = document.getElementById("ex"),
     hint = document.getElementById("hint"), cat = document.getElementById("cat"),
     wrap = document.getElementById("wrap"), result = document.getElementById("result");
-var cur, mistakes, walking, cells, dests, startSpot;
+var cur, mistakes, walking, cells, dests, starts, catSpot, pacer;
+
+function rnd(a, b){ return a + Math.floor(Math.random() * (b - a + 1)); }
+function shuffle(a){ for (var i = a.length - 1; i > 0; i--){ var j = rnd(0, i), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+// Випадковий шлях: від верхнього рядка до нижнього, 8–10 клітинок, без повторів.
+function makePath(){
+  var R = 6, C = 5;
+  for (var tries = 0; tries < 500; tries++){
+    var r = 0, c = rnd(0, C - 1), p = [[r, c]], seen = {};
+    seen[r + "," + c] = 1;
+    while (r < R - 1 && p.length <= 10){
+      var opts = [[1,0],[1,0],[0,1],[0,-1]].filter(function(m){
+        var nr = r + m[0], nc = c + m[1];
+        return nc >= 0 && nc < C && !seen[nr + "," + nc];
+      });
+      if (!opts.length) break;
+      var m = opts[rnd(0, opts.length - 1)];
+      r += m[0]; c += m[1]; p.push([r, c]); seen[r + "," + c] = 1;
+    }
+    if (r === R - 1 && p.length >= 8 && p.length <= 10) return p;
+  }
+  return null;
+}
+
+// Шаблони прикладів (порядок дій: спочатку · та :, потім + та −).
+var TPL = [
+  function(){ var a = rnd(2,9), b = rnd(2,9), p = a * b, ds = [];
+    for (var c = 2; c <= 9; c++) if (p % c === 0) ds.push(c);
+    if (!ds.length) return null;
+    var d = ds[rnd(0, ds.length - 1)];
+    return {t: a + " · " + b + " : " + d, a: p / d}; },
+  function(){ var z = rnd(2,9), q = rnd(2,9), x = rnd(50,100);
+    return {t: x + " − " + (z * q) + " : " + z, a: x - q}; },
+  function(){ var a = rnd(3,9), b = rnd(3,9), c = rnd(5,30);
+    return {t: a + " · " + b + " − " + c, a: a * b - c}; },
+  function(){ var z = rnd(2,9), q = rnd(2,9), x = rnd(10,80);
+    return {t: x + " + " + (z * q) + " : " + z, a: x + q}; },
+  function(){ var z = rnd(2,9), q = rnd(2,9), x = rnd(10,80);
+    return {t: (z * q) + " : " + z + " + " + x, a: q + x}; },
+  function(){ var a = rnd(2,9), b = rnd(2,9), x = rnd(60,100);
+    return {t: x + " − " + a + " · " + b, a: x - a * b}; },
+  function(){ var a = rnd(2,9), b = rnd(2,9), x = rnd(10,60);
+    return {t: x + " + " + a + " · " + b, a: x + a * b}; },
+  function(){ var x = rnd(60,100), y = rnd(10,40), z = rnd(5,30);
+    return {t: x + " − " + y + " + " + z, a: x - y + z}; },
+  function(){ var a = rnd(3,9), b = rnd(3,9), c = rnd(10,50);
+    return {t: a + " · " + b + " + " + c, a: a * b + c}; },
+  function(){ var x = rnd(20,60), y = rnd(10,40), z = rnd(5,30);
+    return {t: x + " + " + y + " − " + z, a: x + y - z}; }
+];
+
+function genEx(path){
+  var used = {}, ex = [], last = -1;
+  for (var i = 0; i < path.length; i++){
+    var e = null, k = 0;
+    while (!e && k++ < 200){
+      var ti = rnd(0, TPL.length - 1);
+      if (ti === last && k < 50) continue;
+      var x = TPL[ti]();
+      if (x && x.a >= 10 && x.a <= 99 && !used[x.a]){ x.ti = ti; e = x; }
+    }
+    if (!e) return null;
+    used[e.a] = 1; last = e.ti;
+    ex.push({t: e.t, a: e.a, c: path[i]});
+  }
+  return ex;
+}
+
+// Решта клітинок: «схожі» числа (відповідь ±1, ±2, ±10), потім випадкові.
+function genGrid(ex){
+  var G = [], used = {}, pool = [], free = [], r, c;
+  for (r = 0; r < 6; r++) G.push([0,0,0,0,0]);
+  ex.forEach(function(e){ used[e.a] = 1; G[e.c[0]][e.c[1]] = e.a; });
+  ex.forEach(function(e){ [10,-10,1,-1,2,-2].forEach(function(d){ pool.push(e.a + d); }); });
+  shuffle(pool);
+  for (r = 0; r < 6; r++) for (c = 0; c < 5; c++) if (G[r][c] === 0) free.push([r, c]);
+  shuffle(free);
+  free.forEach(function(p){
+    var v = null;
+    while (pool.length){ var x = pool.pop(); if (x >= 10 && x <= 99 && !used[x]){ v = x; break; } }
+    while (v === null){ var y = rnd(10, 99); if (!used[y]) v = y; }
+    used[v] = 1; G[p[0]][p[1]] = v;
+  });
+  return G;
+}
+
+function generate(){
+  for (var i = 0; i < 20; i++){
+    var p = makePath(); if (!p) continue;
+    var ex = genEx(p); if (!ex) continue;
+    EX = ex; GRID = genGrid(ex); return;
+  }
+  EX = EX0; GRID = GRID0;
+}
 
 function init(){
+  generate();
   cur = 0; mistakes = 0; walking = false; cells = {}; dests = [];
   maze.innerHTML = ""; exEl.innerHTML = ""; hint.textContent = ""; hint.className = "hint";
   result.classList.remove("show");
 
+  clearInterval(pacer);
   var sr = document.createElement("div");
-  sr.className = "startrow";
-  startSpot = document.createElement("div");
-  startSpot.className = "start"; startSpot.textContent = "старт";
-  sr.appendChild(startSpot); maze.appendChild(sr);
+  sr.className = "startrow"; starts = [];
+  for (var s = 0; s < 5; s++){
+    var sp = document.createElement("div");
+    sp.className = "start"; sr.appendChild(sp); starts.push(sp);
+  }
+  maze.appendChild(sr);
 
   for (var r = 0; r < GRID.length; r++){
     for (var c = 0; c < GRID[r].length; c++){
@@ -206,7 +306,15 @@ function init(){
     li.className = "row"; li.id = "r" + i;
     exEl.appendChild(li); drawRow(i);
   });
-  placeCat(startSpot);
+  // Поки дитина розв’язує, Мурко ходить вправо-вліво над лабіринтом.
+  catSpot = starts[2]; placeCat(catSpot);
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+    pacer = setInterval(function(){
+      if (walking) return;
+      var i; do { i = rnd(0, 4); } while (starts[i] === catSpot);
+      catSpot = starts[i]; placeCat(catSpot);
+    }, 1100);
+  }
   focusInput();
 }
 
@@ -267,7 +375,9 @@ function placeCat(target){
 function finish(){
   walking = true;
   hint.className = "hint"; hint.textContent = "Усі приклади розв’язано! Дивимось, куди піде Мурко…";
-  var steps = EX.map(function(e){ return cells[e.c[0] + "," + e.c[1]]; });
+  clearInterval(pacer);
+  // Спочатку Мурко зупиняється над першою клітинкою, потім іде шляхом.
+  var steps = [starts[EX[0].c[1]]].concat(EX.map(function(e){ return cells[e.c[0] + "," + e.c[1]]; }));
   var last = EX[EX.length - 1].c[1];
   var winIdx = DEST.findIndex(function(d){ return d.cols.indexOf(last) !== -1; });
   steps.push(dests[winIdx]);
@@ -295,7 +405,7 @@ function showResult(winIdx){
 }
 
 document.getElementById("again").addEventListener("click", init);
-window.addEventListener("resize", function(){ if (!walking && cur === 0) placeCat(startSpot); });
+window.addEventListener("resize", function(){ if (!walking) placeCat(catSpot); });
 init();
 </script>
 </body>
