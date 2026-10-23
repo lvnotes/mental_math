@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Куди прямує Мурко?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#e9f3fb; --card:#ffffff; --ink:#1d2b4f; --muted:#5d6b8a; --line:#c9d8ea;
+  --c1:#2f9e5b; --c2:#8e5ad7; --c3:#2f8fd8; --c4:#f08a24;
+  --ok:#1f9d55; --ok-bg:#d6f5e1; --bad:#e03131; --bad-bg:#ffe0e0;
+  --cur:#f5a300; --cur-bg:#fff2c4; --btn:#1d2b4f; --btn-ink:#fff;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#10172b; --card:#1a2342; --ink:#eef2ff; --muted:#a3afd0; --line:#34416b;
+    --c1:#52d68a; --c2:#b992f5; --c3:#63b6f5; --c4:#ffa94d;
+    --ok:#52d68a; --ok-bg:#16452f; --bad:#ff7b7b; --bad-bg:#552126;
+    --cur:#ffc53d; --cur-bg:#4d3d0c; --btn:#eef2ff; --btn-ink:#10172b;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10172b; --card:#1a2342; --ink:#eef2ff; --muted:#a3afd0; --line:#34416b;
+  --c1:#52d68a; --c2:#b992f5; --c3:#63b6f5; --c4:#ffa94d;
+  --ok:#52d68a; --ok-bg:#16452f; --bad:#ff7b7b; --bad-bg:#552126;
+  --cur:#ffc53d; --cur-bg:#4d3d0c; --btn:#eef2ff; --btn-ink:#10172b;
+}
+*{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Nunito","Trebuchet MS",system-ui,sans-serif; font-weight:600; line-height:1.4;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:22px 22px; background-attachment:fixed;
+}
+.page{max-width:920px; margin:0 auto; padding:16px 14px 32px}
+h1{font-size:clamp(26px,6vw,38px); font-weight:900; margin:4px 0 6px; letter-spacing:-.01em}
+.task{margin:0 0 16px; max-width:62ch; font-size:16px}
+.layout{display:grid; gap:16px}
+@media (min-width:760px){.layout{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); align-items:start}}
+.card{background:var(--card); border:2px solid var(--line); border-radius:18px; padding:14px}
+
+/* maze */
+.wrap{position:relative}
+.maze{display:grid; grid-template-columns:repeat(5,1fr); gap:8px}
+.startrow{grid-column:1/-1; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; height:46px}
+.start{grid-column:2; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--muted)}
+.cell{
+  position:relative; aspect-ratio:1/1; display:flex; align-items:center; justify-content:center;
+  font-size:clamp(17px,4.6vw,24px); font-weight:800; background:var(--card);
+  border:3px solid var(--bc,var(--c1)); border-radius:8px; transition:background .2s,color .2s,transform .2s;
+}
+.cell.done{background:var(--ok-bg); border-color:var(--ok); color:var(--ok)}
+.cell.done::after{
+  content:attr(data-step); position:absolute; top:-9px; left:-7px; width:20px; height:20px; border-radius:50%;
+  background:var(--ok); color:var(--card); font-size:11px; line-height:20px; text-align:center; font-weight:900;
+}
+.cell.flash{background:var(--bad-bg); border-color:var(--bad); color:var(--bad); animation:shake .4s}
+.dest{
+  border:3px dashed var(--line); border-radius:12px; padding:8px 4px; text-align:center;
+  font-size:clamp(11px,2.8vw,14px); font-weight:800; margin-top:10px; transition:all .3s;
+}
+.dest b{display:block; font-size:clamp(24px,7vw,34px); line-height:1.1; font-weight:400}
+.dest.win{border-style:solid; border-color:var(--ok); background:var(--ok-bg); transform:scale(1.05)}
+.dest.dim{opacity:.4}
+.cat{
+  position:absolute; left:0; top:0; font-size:clamp(30px,8vw,40px); line-height:1; pointer-events:none; z-index:3;
+  transform:translate(-50%,-50%); transition:left .5s ease-in-out, top .5s ease-in-out;
+}
+
+/* examples */
+.card h2{font-size:18px; font-weight:900; margin:0 0 10px}
+.ex{list-style:none; margin:0; padding:0; display:grid; gap:8px}
+.row{
+  display:grid; grid-template-columns:28px 1fr auto; align-items:center; gap:8px;
+  padding:8px 10px; border:2px solid var(--line); border-radius:12px; background:var(--card);
+  font-size:clamp(17px,4.4vw,20px); font-weight:800; transition:background .2s,border-color .2s;
+}
+.row .n{color:var(--muted); font-size:14px}
+.row .ans{min-width:64px; text-align:center}
+.row.locked{opacity:.55}
+.row.current{border-color:var(--cur); background:var(--cur-bg); box-shadow:0 0 0 3px color-mix(in srgb,var(--cur) 30%,transparent)}
+.row.ok{border-color:var(--ok); background:var(--ok-bg); color:var(--ok)}
+.row.bad{border-color:var(--bad); background:var(--bad-bg); animation:shake .4s}
+.row .form{display:flex; gap:6px; align-items:center}
+input{
+  width:72px; font:inherit; font-weight:900; text-align:center; padding:7px 4px;
+  border:2px solid var(--ink); border-radius:10px; background:var(--card); color:var(--ink);
+}
+.row.bad input{border-color:var(--bad)}
+button{
+  font:inherit; font-weight:800; cursor:pointer; border:0; border-radius:10px; padding:9px 12px;
+  background:var(--btn); color:var(--btn-ink);
+}
+button:focus-visible,input:focus-visible{outline:3px solid var(--c3); outline-offset:2px}
+.hint{min-height:20px; margin:10px 2px 0; font-size:14px; color:var(--muted)}
+.hint.bad{color:var(--bad)}
+
+/* result */
+.result{display:none; text-align:center}
+.result.show{display:block; animation:pop .5s}
+.result .big{font-size:20px; font-weight:900; margin:4px 0}
+.stars{font-size:30px; letter-spacing:4px; margin:6px 0}
+.result p{margin:4px 0 12px; color:var(--muted)}
+
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main class="page">
+  <h1>Куди прямує Мурко?</h1>
+  <p class="task">Обчисли ланцюжок прикладів. Знайди відповіді в числовому лабіринті — клітинки зафарбуються. З’єднай їх між собою і дізнайся, куди прямує кіт Мурко.</p>
+
+  <div class="layout">
+    <section class="card" aria-label="Числовий лабіринт">
+      <div class="wrap" id="wrap">
+        <div class="maze" id="maze"></div>
+        <div class="cat" id="cat" aria-hidden="true">🐱</div>
+      </div>
+    </section>
+
+    <div>
+      <section class="card">
+        <h2>Приклади</h2>
+        <ol class="ex" id="ex"></ol>
+        <div class="hint" id="hint" aria-live="polite"></div>
+      </section>
+      <section class="card result" id="result" style="margin-top:16px">
+        <div class="stars" id="stars"></div>
+        <div class="big" id="rtitle"></div>
+        <p id="rtext"></p>
+        <button id="again">Пройти ще раз</button>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+// Приклади: порядок дій враховано (спочатку · та :, потім + та −).
+// c = [рядок, стовпчик] клітинки з правильною відповіддю.
+var EX = [
+  {t:"5 · 6 : 3",   a:10, c:[0,1]},
+  {t:"60 − 24 : 4", a:54, c:[1,1]},
+  {t:"8 · 7 − 16",  a:40, c:[1,2]},
+  {t:"25 + 36 : 6", a:31, c:[2,2]},
+  {t:"72 : 8 + 40", a:49, c:[3,2]},
+  {t:"90 − 7 · 6",  a:48, c:[3,3]},
+  {t:"36 + 3 · 9",  a:63, c:[4,3]},
+  {t:"100 − 45 : 5",a:91, c:[5,3]}
+];
+var GRID = [
+  [12,10,18,45,36],
+  [33,54,40,56,27],
+  [64,52,31,28,81],
+  [39,66,49,48,57],
+  [21,74,85,63,42],
+  [19,77,58,91,25]
+];
+var DEST = [
+  {name:"Молочарня", icon:"🥛", span:2, cols:[0,1]},
+  {name:"Парк", icon:"🌳", span:1, cols:[2]},
+  {name:"Рибна крамниця", icon:"🐟", span:2, cols:[3,4]}
+];
+var COLORS = ["var(--c1)","var(--c2)","var(--c3)","var(--c4)"];
+
+var maze = document.getElementById("maze"), exEl = document.getElementById("ex"),
+    hint = document.getElementById("hint"), cat = document.getElementById("cat"),
+    wrap = document.getElementById("wrap"), result = document.getElementById("result");
+var cur, mistakes, walking, cells, dests, startSpot;
+
+function init(){
+  cur = 0; mistakes = 0; walking = false; cells = {}; dests = [];
+  maze.innerHTML = ""; exEl.innerHTML = ""; hint.textContent = ""; hint.className = "hint";
+  result.classList.remove("show");
+
+  var sr = document.createElement("div");
+  sr.className = "startrow";
+  startSpot = document.createElement("div");
+  startSpot.className = "start"; startSpot.textContent = "старт";
+  sr.appendChild(startSpot); maze.appendChild(sr);
+
+  for (var r = 0; r < GRID.length; r++){
+    for (var c = 0; c < GRID[r].length; c++){
+      var d = document.createElement("div");
+      d.className = "cell"; d.textContent = GRID[r][c];
+      d.style.setProperty("--bc", COLORS[(r + c * 2) % 4]);
+      maze.appendChild(d); cells[r + "," + c] = d;
+    }
+  }
+  DEST.forEach(function(x){
+    var d = document.createElement("div");
+    d.className = "dest"; d.style.gridColumn = "span " + x.span;
+    d.innerHTML = "<b>" + x.icon + "</b>" + x.name;
+    maze.appendChild(d); dests.push(d);
+  });
+
+  EX.forEach(function(e, i){
+    var li = document.createElement("li");
+    li.className = "row"; li.id = "r" + i;
+    exEl.appendChild(li); drawRow(i);
+  });
+  placeCat(startSpot);
+  focusInput();
+}
+
+function drawRow(i){
+  var li = document.getElementById("r" + i), e = EX[i];
+  var state = i < cur ? "ok" : i === cur ? "current" : "locked";
+  li.className = "row " + state;
+  var left = "<span class=\"n\">" + (i + 1) + ".</span><span>" + e.t + " =</span>";
+  if (state === "ok"){
+    li.innerHTML = left + "<span class=\"ans\">" + e.a + " ✓</span>";
+  } else if (state === "current"){
+    li.innerHTML = left + "<span class=\"form\"><input id=\"inp\" type=\"text\" inputmode=\"numeric\" pattern=\"[0-9]*\" autocomplete=\"off\" aria-label=\"Відповідь до прикладу " + (i + 1) + "\"><button id=\"chk\">Перевірити</button></span>";
+    document.getElementById("inp").addEventListener("keydown", function(ev){ if (ev.key === "Enter") check(); });
+    document.getElementById("chk").addEventListener("click", check);
+  } else {
+    li.innerHTML = left + "<span class=\"ans\">?</span>";
+  }
+}
+
+function focusInput(){
+  var inp = document.getElementById("inp");
+  if (inp) inp.focus({preventScroll:true});
+}
+
+function check(){
+  if (walking) return;
+  var inp = document.getElementById("inp");
+  var v = inp.value.trim();
+  if (v === "") return;
+  var li = document.getElementById("r" + cur), e = EX[cur];
+  if (Number(v) === e.a){
+    var cell = cells[e.c[0] + "," + e.c[1]];
+    cell.classList.add("done"); cell.dataset.step = cur + 1;
+    cur++;
+    hint.className = "hint"; hint.textContent = "Правильно! Клітинку зафарбовано.";
+    drawRow(cur - 1);
+    if (cur < EX.length){ drawRow(cur); focusInput(); } else { finish(); }
+  } else {
+    mistakes++;
+    li.classList.remove("bad"); void li.offsetWidth; li.classList.add("bad");
+    hint.className = "hint bad"; hint.textContent = "Не збігається. Перерахуй і спробуй ще раз.";
+    for (var k in cells){
+      if (cells[k].textContent === String(Number(v)) && !cells[k].classList.contains("done")){
+        cells[k].classList.add("flash");
+        (function(c){ setTimeout(function(){ c.classList.remove("flash"); }, 900); })(cells[k]);
+      }
+    }
+    inp.select();
+  }
+}
+
+function placeCat(target){
+  var w = wrap.getBoundingClientRect(), t = target.getBoundingClientRect();
+  cat.style.left = (t.left - w.left + t.width / 2) + "px";
+  cat.style.top = (t.top - w.top + t.height / 2) + "px";
+}
+
+function finish(){
+  walking = true;
+  hint.className = "hint"; hint.textContent = "Усі приклади розв’язано! Дивимось, куди піде Мурко…";
+  var steps = EX.map(function(e){ return cells[e.c[0] + "," + e.c[1]]; });
+  var last = EX[EX.length - 1].c[1];
+  var winIdx = DEST.findIndex(function(d){ return d.cols.indexOf(last) !== -1; });
+  steps.push(dests[winIdx]);
+  var i = 0;
+  var timer = setInterval(function(){
+    placeCat(steps[i]); i++;
+    if (i >= steps.length){
+      clearInterval(timer);
+      setTimeout(function(){ showResult(winIdx); }, 700);
+    }
+  }, 600);
+}
+
+function showResult(winIdx){
+  dests.forEach(function(d, j){ d.classList.add(j === winIdx ? "win" : "dim"); });
+  var n = mistakes === 0 ? 3 : mistakes <= 2 ? 2 : 1;
+  document.getElementById("stars").textContent = "★★★".slice(0, n) + "☆☆☆".slice(0, 3 - n);
+  document.getElementById("rtitle").textContent = "Мурко прийшов: " + DEST[winIdx].name.toLowerCase() + " " + DEST[winIdx].icon;
+  document.getElementById("rtext").textContent = mistakes === 0
+    ? "Жодної помилки — чудова робота!"
+    : "Помилок: " + mistakes + ". Спробуй пройти ще раз без помилок!";
+  hint.textContent = "";
+  result.classList.add("show");
+  result.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+document.getElementById("again").addEventListener("click", init);
+window.addEventListener("resize", function(){ if (!walking && cur === 0) placeCat(startSpot); });
+init();
+</script>
+</body>
+</html>
